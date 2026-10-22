@@ -1,0 +1,101 @@
+# Publishes the phone app so it opens in Expo Go (branch "preview").
+# Runs on GitHub on every push to main that touches apps/mobile.
+# Needs the EXPO_TOKEN secret: an Expo access token from expo.dev > Account settings > Access tokens.
+# Every run saves its log, result and the Expo Go link to the "expo-go-log" branch.
+name: Send to Expo Go
+
+on:
+  push:
+    branches: [main]
+    paths: ['apps/mobile/**', '.github/workflows/expo-go.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: expo-go
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: apps/mobile
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - name: Check for the Expo token
+        id: token
+        working-directory: .
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then echo "EXPO_TOKEN not set yet; skipping."; echo "ok=false" >> "$GITHUB_OUTPUT"; else echo "ok=true" >> "$GITHUB_OUTPUT"; fi
+
+      - uses: actions/checkout@v4
+        if: steps.token.outputs.ok == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.token.outputs.ok == 'true'
+        with:
+          node-version: 22
+
+      - name: Install
+        if: steps.token.outputs.ok == 'true'
+        run: |
+          set -o pipefail
+          { npm install --no-audit --no-fund || npm install --no-audit --no-fund --legacy-peer-deps; } 2>&1 | tee ../../expo.log
+          npx expo install --fix 2>&1 | tee -a ../../expo.log || true
+          npm ls expo react-native react-native-webview 2>&1 | tee -a ../../expo.log || true
+
+      - name: Link the Expo project (creates it on the first run)
+        if: steps.token.outputs.ok == 'true'
+        run: |
+          set -o pipefail
+          npx --yes eas-cli@latest init --non-interactive --force 2>&1 | tee -a ../../expo.log
+          node -e '
+            const fs = require("fs");
+            const j = JSON.parse(fs.readFileSync("app.json", "utf8"));
+            const id = j.expo.extra && j.expo.extra.eas && j.expo.extra.eas.projectId;
+            if (!id) { console.error("no projectId after eas init"); process.exit(1); }
+            j.expo.updates = { url: "https://u.expo.dev/" + id };
+            fs.writeFileSync("app.json", JSON.stringify(j, null, 2) + "\n");
+            console.log("Expo project id: " + id);
+          ' 2>&1 | tee -a ../../expo.log
+
+      - name: Publish update
+        if: steps.token.outputs.ok == 'true'
+        run: |
+          set -o pipefail
+          npx --yes eas-cli@latest update --branch preview --message "Latest emulator test version" --non-interactive --json > update.json 2> >(tee -a ../../expo.log >&2)
+          cat update.json >> ../../expo.log
+          node -e '
+            const fs = require("fs");
+            const id = JSON.parse(fs.readFileSync("app.json", "utf8")).expo.extra.eas.projectId;
+            const u = [].concat(JSON.parse(fs.readFileSync("update.json", "utf8")))[0];
+            const link = "exp://u.expo.dev/" + id + "/group/" + u.group;
+            fs.writeFileSync("../../expo-link.txt", link + "\n");
+            console.log("Open in Expo Go: " + link);
+          ' 2>&1 | tee -a ../../expo.log
+
+      - name: Save the project id in the repo (first run only)
+        if: steps.token.outputs.ok == 'true'
+        working-directory: .
+        run: |
+          if ! git diff --quiet apps/mobile/app.json; then
+            git config user.name "Emulator bot"
+            git config user.email "omegacleantn@gmail.com"
+            git add apps/mobile/app.json
+            git commit -m "Link apps/mobile to its Expo project [skip ci]"
+            git push
+          fi
+
+      - name: Save the log (success or failure)
+        if: always()
+        working-directory: .
+        run: |
+          mkdir -p /tmp/log && cp expo.log /tmp/log/ 2>/dev/null || echo "no log" > /tmp/log/expo.log
+          cp expo-link.txt /tmp/log/ 2>/dev/null || true
+          echo "${{ job.status }} ${GITHUB_SHA::7} $(date -u +%FT%TZ)" > /tmp/log/status.txt
+          cd /tmp/log && git init -q -b expo-go-log && git config user.name "Emulator bot" && git config user.email "omegacleantn@gmail.com"
+          git add -A && git commit -q -m "Expo Go log ${GITHUB_SHA::7}"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" expo-go-log

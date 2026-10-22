@@ -17,7 +17,8 @@ run PS5 games, and nothing in it pretends to. See
 | `crates/emulator-core` | Wires CPU + memory, runs programs, produces reports; `emu-diag` CLI |
 | `crates/emulator-ffi` | One C interface for both frontends (WebAssembly + iOS static library) |
 | `apps/browser` | TypeScript/Vite diagnostics page + step debugger |
-| `apps/ios` | Not started (needs a Mac) — plan inside |
+| `apps/mobile` | Expo Go phone app that shows the browser build |
+| `apps/ios` | Native iOS app: not started (needs a Mac) — plan inside |
 | `.github/workflows/tests.yml` | CI: native tests, C interface, WebAssembly smoke test, browser build |
 
 ## Run it

@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Emulator Core",
+    "slug": "ps5emu",
+    "version": "0.1.0",
+    "orientation": "default",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#0b0d12",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.wulfnout.ps5emu"
+    },
+    "android": {
+      "package": "app.wulfnout.ps5emu"
+    },
+    "owner": "wulfnout",
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    }
+  }
+}

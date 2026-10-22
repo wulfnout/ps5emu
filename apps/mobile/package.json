@@ -1,0 +1,20 @@
+{
+  "name": "emulator-mobile",
+  "version": "0.1.0",
+  "main": "index.js",
+  "private": true,
+  "scripts": {
+    "start": "expo start",
+    "tunnel": "expo start --tunnel",
+    "fix": "expo install --fix"
+  },
+  "dependencies": {
+    "expo": "~57.0.27",
+    "expo-status-bar": "~57.0.1",
+    "expo-updates": "~57.0.23",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-webview": "13.16.1"
+  }
+}

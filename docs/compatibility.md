@@ -51,7 +51,7 @@ Any instruction outside this list stops execution with
 | Kernel / OS services (threads, sync, files, networking) | **Not started** |
 | GPU command processing, shader translation | **Not started** |
 | Audio | **Not started** |
-| Controller input | **Not started** (UI only) |
+| Controller input | Controller port at 0x200000 fed by DualSense/other controllers and keyboard + mouse (docs/input.md). PS5 system pad API not implemented |
 
 ## Frontends
 

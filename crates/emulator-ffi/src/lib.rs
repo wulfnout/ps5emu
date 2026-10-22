@@ -15,7 +15,7 @@
 //! - Machines are opaque handles; free them with `emu_machine_free`.
 
 use emulator_core::cpu_x64::{CpuError, GPR_NAMES};
-use emulator_core::{Machine, DEFAULT_STEP_LIMIT};
+use emulator_core::{InputState, Machine, DEFAULT_STEP_LIMIT};
 use std::cell::RefCell;
 
 thread_local! {
@@ -133,6 +133,36 @@ pub extern "C" fn emu_screen_height() -> u32 {
 #[no_mangle]
 pub unsafe extern "C" fn emu_machine_screen_ptr(h: *const MachineHandle) -> *const u8 {
     (*h).machine.framebuffer().as_ptr()
+}
+
+/// Send one input frame to the machine (see docs/input.md for the layout).
+/// Sticks and triggers are 0..255; sticks center at 128.
+///
+/// # Safety
+/// `h` must be a live handle.
+#[no_mangle]
+pub unsafe extern "C" fn emu_machine_set_input(
+    h: *mut MachineHandle,
+    source: u32,
+    buttons: u32,
+    left_x: u32,
+    left_y: u32,
+    right_x: u32,
+    right_y: u32,
+    l2: u32,
+    r2: u32,
+) {
+    let c = |v: u32| v.min(255) as u8;
+    (*h).machine.set_input(&InputState {
+        source,
+        buttons,
+        left_x: c(left_x),
+        left_y: c(left_y),
+        right_x: c(right_x),
+        right_y: c(right_y),
+        l2: c(l2),
+        r2: c(r2),
+    });
 }
 
 /// Whether built-in program `index` draws to the screen (1) or not (0).

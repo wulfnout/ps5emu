@@ -57,9 +57,16 @@ programs (`draw_gradient`, `draw_checker`) are real x86-64 code that the
 emulated CPU runs to paint every pixel; the browser page shows it drawing.
 This is a simple test screen, not the PS5's GPU.
 
+## Milestone 3: controllers
+
+A controller port in guest memory, filled every frame from a paired
+DualSense (or any controller the browser sees), or keyboard and mouse on a
+computer. The `controller_test` program reads it to move squares and light a
+button bar. No on-screen touch controls. Details: [docs/input.md](docs/input.md).
+
 ## Next steps
 
 1. Widen the instruction set: MUL/DIV, MOVZX/MOVSX, SETcc, rotates, 8/16-bit sizes.
-2. Keyboard/controller input the guest can read.
+2. Audio output.
 3. Page tables and virtual memory.
 4. Start the iOS shell on a Mac.

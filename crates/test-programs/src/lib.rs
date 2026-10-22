@@ -9,6 +9,7 @@
 //!   0x1000–0x1FFF  data   (read + write)
 //!   0x2000–0x2FFF  stack  (read + write), RSP starts at 0x3000
 //!   0x100000–      screen (read + write), 256x144 x 32-bit pixels
+//!   0x200000–      controller port (read only), see INPUT_BASE
 
 pub const CODE_BASE: u64 = 0x0000;
 pub const CODE_SIZE: u64 = 0x1000;
@@ -22,6 +23,23 @@ pub const FB_BASE: u64 = 0x10_0000;
 pub const FB_WIDTH: u32 = 256;
 pub const FB_HEIGHT: u32 = 144;
 pub const FB_SIZE: u64 = (FB_WIDTH * FB_HEIGHT * 4) as u64;
+
+/// Controller port (guest read-only), all fields little-endian u32:
+///   +0x00 frame counter (host increments once per frame)
+///   +0x04 source: 0 none, 1 controller, 2 keyboard/mouse
+///   +0x08 buttons bitmask (bit order = INPUT_BUTTONS)
+///   +0x0C left stick X, +0x10 left stick Y, +0x14 right stick X, +0x18 right stick Y
+///         (0..255, 128 = centered, like a DualSense report)
+///   +0x1C L2 analog, +0x20 R2 analog (0..255)
+pub const INPUT_BASE: u64 = 0x20_0000;
+pub const INPUT_SIZE: u64 = 0x1000;
+
+/// Button bit order. Matches the DualSense layout and the browser
+/// "standard" gamepad mapping, so button N in the browser is bit N here.
+pub const INPUT_BUTTONS: [&str; 18] = [
+    "Cross", "Circle", "Square", "Triangle", "L1", "R1", "L2", "R2", "Create", "Options",
+    "L3", "R3", "Up", "Down", "Left", "Right", "PS", "Touchpad",
+];
 
 // Register indices in x86-64 encoding order.
 pub const RAX: u8 = 0;
@@ -37,6 +55,8 @@ pub enum ExpectedStop {
     Unsupported { rip: u64 },
     /// Execution must stop on a memory fault at this RIP, accessing this address.
     MemoryFault { rip: u64, addr: u64 },
+    /// Program runs forever (e.g. waits for input frames); must still be running at the step limit.
+    StepLimit,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -59,6 +79,23 @@ pub struct TestProgram {
 }
 
 pub const ALL: &[TestProgram] = &[
+    TestProgram {
+        name: "controller_test",
+        description: "Reads the controller port every frame: sticks move two squares, every button lights its slot in the bar. Runs forever, waiting for input frames.",
+        source: include_str!("../asm/controller_test.s"),
+        code: include_bytes!("../asm/controller_test.bin"),
+        // With no input frames the program draws once, then waits forever.
+        expect_stop: ExpectedStop::StepLimit,
+        expect_regs: &[],
+        expect_mem: &[(0x1000, 0)],
+        expect_zf: Some(true),
+        expect_mem32: &[
+            (FB_BASE, 0xFFFFFF),           // left square at (0,0), sticks read 0
+            (FB_BASE + 0x5050, 0x000000),  // empty background at (20,20)
+            (FB_BASE + 0x22010, 0x232A3A), // Cross light at (4,136), off
+        ],
+        draws: true,
+    },
     TestProgram {
         name: "draw_gradient",
         description: "Fills the 256x144 screen with a color gradient: red follows x, green follows y (IMUL + SHR), blue is x XOR y.",

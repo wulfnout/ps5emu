@@ -45,6 +45,13 @@ int32_t  emu_test_program_draws(size_t index);
 /* width*height*4 bytes, 0x00RRGGBB little-endian, valid until the machine is freed */
 const uint8_t *emu_machine_screen_ptr(const MachineHandle *h);
 
+/* One input frame. source: 0 none, 1 controller, 2 keyboard/mouse.
+ * buttons: bit order Cross, Circle, Square, Triangle, L1, R1, L2, R2, Create,
+ * Options, L3, R3, Up, Down, Left, Right, PS, Touchpad. Sticks/triggers 0..255. */
+void emu_machine_set_input(MachineHandle *h, uint32_t source, uint32_t buttons,
+                           uint32_t left_x, uint32_t left_y, uint32_t right_x, uint32_t right_y,
+                           uint32_t l2, uint32_t r2);
+
 int32_t emu_machine_step(MachineHandle *h);              /* EMU_* status */
 int32_t emu_machine_run(MachineHandle *h);               /* EMU_* status */
 int32_t emu_machine_run_steps(MachineHandle *h, uint32_t n); /* at most n instructions */

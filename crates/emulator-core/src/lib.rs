@@ -10,7 +10,7 @@
 use cpu_x64::{flags, Cpu, CpuError, StopReason, GPR_NAMES};
 use guest_memory::{GuestMemory, Perms};
 use test_programs::{ExpectedStop, TestProgram};
-use test_programs::{CODE_BASE, CODE_SIZE, DATA_BASE, DATA_SIZE, FB_BASE, FB_HEIGHT, FB_SIZE, FB_WIDTH, STACK_BASE, STACK_SIZE};
+use test_programs::{CODE_BASE, CODE_SIZE, DATA_BASE, DATA_SIZE, FB_BASE, FB_HEIGHT, FB_SIZE, FB_WIDTH, INPUT_BASE, INPUT_SIZE, STACK_BASE, STACK_SIZE};
 
 pub use cpu_x64;
 pub use guest_memory;
@@ -18,6 +18,26 @@ pub use test_programs;
 
 /// Hard cap so a runaway guest loop can never hang a frontend.
 pub const DEFAULT_STEP_LIMIT: u64 = 1_000_000;
+
+/// Controller state the frontend sends once per frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InputState {
+    /// 0 none, 1 controller, 2 keyboard/mouse
+    pub source: u32,
+    pub buttons: u32,
+    pub left_x: u8,
+    pub left_y: u8,
+    pub right_x: u8,
+    pub right_y: u8,
+    pub l2: u8,
+    pub r2: u8,
+}
+
+impl Default for InputState {
+    fn default() -> Self {
+        Self { source: 0, buttons: 0, left_x: 128, left_y: 128, right_x: 128, right_y: 128, l2: 0, r2: 0 }
+    }
+}
 
 pub struct Machine {
     pub cpu: Cpu,
@@ -32,6 +52,7 @@ impl Machine {
         memory.map(DATA_BASE, DATA_SIZE, Perms::RW).expect("data map");
         memory.map(STACK_BASE, STACK_SIZE, Perms::RW).expect("stack map");
         memory.map(FB_BASE, FB_SIZE, Perms::RW).expect("screen map");
+        memory.map(INPUT_BASE, INPUT_SIZE, Perms::R).expect("input map");
         let mut cpu = Cpu::new();
         cpu.regs.gpr[4] = STACK_BASE + STACK_SIZE; // rsp
         Self { cpu, memory }
@@ -40,6 +61,29 @@ impl Machine {
     /// The screen as raw 0x00RRGGBB little-endian pixels, row by row.
     pub fn framebuffer(&self) -> &[u8] {
         self.memory.view(FB_BASE, FB_SIZE as usize).expect("screen is mapped")
+    }
+
+    /// Publish a new input frame: writes the controller port and bumps the
+    /// frame counter so a waiting guest wakes up.
+    pub fn set_input(&mut self, s: &InputState) {
+        let frame = self.memory.read_u32(INPUT_BASE).unwrap_or(0).wrapping_add(1);
+        let words = [
+            frame,
+            s.source,
+            s.buttons,
+            s.left_x as u32,
+            s.left_y as u32,
+            s.right_x as u32,
+            s.right_y as u32,
+            s.l2 as u32,
+            s.r2 as u32,
+        ];
+        let mut bytes = [0u8; 36];
+        for (i, w) in words.iter().enumerate() {
+            bytes[i * 4..i * 4 + 4].copy_from_slice(&w.to_le_bytes());
+        }
+        // host-side write: the region is read-only to the guest
+        self.memory.load(INPUT_BASE, &bytes).expect("input port is mapped");
     }
 
     pub const SCREEN_WIDTH: u32 = FB_WIDTH;
@@ -107,6 +151,7 @@ pub fn run_test_program(p: &TestProgram) -> ProgramReport {
         (ExpectedStop::Halted, s) => ("halted".to_string(), short_stop(s)),
         (ExpectedStop::Unsupported { rip }, s) => (format!("unsupported @ {rip:#x}"), short_stop(s)),
         (ExpectedStop::MemoryFault { rip, addr }, s) => (format!("memory fault @ {rip:#x} addr {addr:#x}"), short_stop(s)),
+        (ExpectedStop::StepLimit, s) => ("step limit".to_string(), short_stop(s)),
     };
     check(&mut checks, "stop".into(), exp_stop, act_stop);
 
@@ -224,6 +269,37 @@ mod tests {
         let j = run_all_json();
         assert!(j.starts_with('[') && j.ends_with(']'));
         assert!(j.contains(r#""name":"add_and_store""#));
+    }
+
+    #[test]
+    fn input_frames_reach_guest_memory() {
+        let mut m = Machine::with_standard_layout();
+        m.set_input(&InputState { source: 1, buttons: 0b101, left_x: 255, ..Default::default() });
+        m.set_input(&InputState { source: 1, buttons: 0b101, left_x: 255, ..Default::default() });
+        assert_eq!(m.memory.read_u32(INPUT_BASE).unwrap(), 2); // frame counter
+        assert_eq!(m.memory.read_u32(INPUT_BASE + 8).unwrap(), 0b101);
+        assert_eq!(m.memory.read_u32(INPUT_BASE + 0xC).unwrap(), 255);
+        assert_eq!(m.memory.read_u32(INPUT_BASE + 0x10).unwrap(), 128);
+        // the guest cannot write the port
+        assert!(m.memory.write_u32(INPUT_BASE, 0).is_err());
+    }
+
+    #[test]
+    fn controller_program_follows_input() {
+        let p = test_programs::ALL.iter().find(|p| p.name == "controller_test").unwrap();
+        let mut m = Machine::with_standard_layout();
+        m.load_code(p.code).unwrap();
+        m.cpu.run(&mut m.memory, 50_000); // first frame drawn, now waiting
+        // push left stick fully right/down, hold Cross (bit 0) and Triangle (bit 3)
+        m.set_input(&InputState { source: 1, buttons: 0b1001, left_x: 255, left_y: 255, ..Default::default() });
+        m.cpu.run(&mut m.memory, 50_000);
+        let px = |x: u64, y: u64| m.memory.read_u32(FB_BASE + (y * 256 + x) * 4).unwrap();
+        assert_eq!(px(247, 119), 0x3DDC97, "left square moved to the corner, green while Cross held");
+        assert_eq!(px(0, 0), 0, "old square erased");
+        assert_eq!(px(124, 60), 0x6EA8FF, "right stick centered: blue square in the middle");
+        assert_eq!(px(4, 136), 0x3DDC97, "Cross light on");
+        assert_eq!(px(4 + 3 * 14, 136), 0x3DDC97, "Triangle light on");
+        assert_eq!(px(4 + 14, 136), 0x232A3A, "Circle light off");
     }
 
     #[test]

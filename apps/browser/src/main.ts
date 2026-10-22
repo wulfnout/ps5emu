@@ -1,5 +1,6 @@
 import "./style.css";
 import { Core, Machine, STATUS, type MachineState, type ProgramReport } from "./core";
+import { InputManager, SOURCE, hasMouse, pressedNames, type InputFrame } from "./input";
 
 // Change this to your product name; it is the only place the UI names itself.
 const PRODUCT_NAME = "Emulator Core";
@@ -100,6 +101,27 @@ let previous: MachineState | null = null;
 let playing = 0;
 let screenCtx: CanvasRenderingContext2D | null = null;
 let screenImg: ImageData | null = null;
+let input: InputManager | null = null;
+let lastStatusKey = "";
+
+function showInputStatus(f: InputFrame) {
+  const pressed = pressedNames(f.buttons);
+  const key = `${f.source}|${f.controllerName}|${pressed.join(",")}|${input?.mouseLocked}`;
+  if (key === lastStatusKey) return;
+  lastStatusKey = key;
+  let who: string;
+  if (f.source === SOURCE.CONTROLLER) {
+    who = `<span class="pad ok">🎮 ${esc(f.controllerName.replace(/\s*\(.*$/, "") || "Controller")}</span>`;
+  } else if (f.source === SOURCE.KEYBOARD_MOUSE) {
+    who = `<span class="pad">⌨️ Keyboard &amp; mouse${input?.mouseLocked ? " · mouse captured (Esc to release)" : ""}</span>`;
+  } else if (hasMouse()) {
+    who = `<span class="hint">No controller yet. Plug in or pair one (DualSense: hold PS + Create to pair) and press a button, or use the keyboard.</span>`;
+  } else {
+    who = `<span class="hint">No controller yet. Pair it in Settings → Bluetooth (DualSense: hold PS + Create until the light flashes), then press any button on it.</span>`;
+  }
+  const chips = pressed.map((n) => `<span class="chip">${n}</span>`).join("");
+  $("#input-status").innerHTML = `${who}<span class="chips">${chips}</span>`;
+}
 
 function setupScreen() {
   const canvas = $("#screen") as HTMLCanvasElement;
@@ -107,6 +129,12 @@ function setupScreen() {
   canvas.width = width;
   canvas.height = height;
   screenCtx = canvas.getContext("2d");
+  input = new InputManager(canvas);
+  if (hasMouse()) ($("#kbm-help") as HTMLDetailsElement).hidden = false;
+  showInputStatus(input.read());
+  // Controllers appear after their first button press; refresh the status even when paused.
+  window.addEventListener("gamepadconnected", () => input && showInputStatus(input.read()));
+  window.addEventListener("gamepaddisconnected", () => input && showInputStatus(input.read()));
   screenImg = screenCtx?.createImageData(width, height) ?? null;
 }
 
@@ -122,6 +150,11 @@ function play() {
   previous = null;
   const tick = () => {
     if (!machine) return;
+    if (input) {
+      const f = input.read();
+      machine.setInput(f);
+      showInputStatus(f);
+    }
     const status = machine.runSteps(12000);
     render();
     playing = status === STATUS.RUNNING ? requestAnimationFrame(tick) : 0;

@@ -62,3 +62,9 @@ pre { background: var(--panel); border: 1px solid var(--line); border-radius: 8p
 .error-box { background: var(--panel); border: 1px solid var(--bad); border-radius: 10px; padding: 16px; }
 #screen { display: block; width: 100%; max-width: 768px; aspect-ratio: 16 / 9; height: auto; image-rendering: pixelated; background: #000; border: 1px solid var(--line); border-radius: 10px; margin: 8px 0; }
 .small { font-size: 13px; }
+.input-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; margin: 6px 0; }
+.input-status .pad { font-weight: 600; }
+.input-status .hint { color: var(--dim); }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { font: 600 11px var(--mono); padding: 2px 6px; border-radius: 4px; background: var(--ok); color: var(--bg); }
+details summary { cursor: pointer; color: var(--accent); }

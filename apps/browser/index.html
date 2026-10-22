@@ -28,7 +28,13 @@
         <p id="m-status"></p>
         <p id="m-error" class="mono error-line"></p>
         <canvas id="screen" width="256" height="144" aria-label="Emulator screen"></canvas>
-        <p class="dim small">256×144 screen mapped at guest address 0x100000. The emulated x86-64 CPU writes every pixel; tap ▶ Run to watch it draw, or Step through it one instruction at a time.</p>
+        <div id="input-status" class="input-status"></div>
+        <details id="kbm-help" class="small" hidden>
+          <summary>Keyboard &amp; mouse controls</summary>
+          <p class="mono">WASD left stick · click the screen, then move the mouse for the right stick (Esc to release) · left click R2 · right click L2<br />
+          Space Cross · C Circle · F Square · R Triangle · Q L1 · E R1 · Shift L3 · V R3 · arrows D-pad · Enter Options · Backspace Create · H PS · T Touchpad</p>
+        </details>
+        <p class="dim small">256×144 screen mapped at guest address 0x100000. The emulated x86-64 CPU writes every pixel and reads the controller port at 0x200000.</p>
         <div class="debug-grid">
           <div>
             <h3>Registers</h3>

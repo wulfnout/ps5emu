@@ -21,6 +21,7 @@ interface CoreExports {
   emu_screen_width(): number;
   emu_screen_height(): number;
   emu_test_program_draws(index: number): number;
+  emu_machine_set_input(h: number, source: number, buttons: number, lx: number, ly: number, rx: number, ry: number, l2: number, r2: number): void;
 }
 
 export const STATUS = { RUNNING: 0, HALTED: 1, ERROR: 2 } as const;
@@ -120,6 +121,11 @@ export class Machine {
 
   run(): number {
     return this.x.emu_machine_run(this.live());
+  }
+
+  /** Send one input frame to the controller port. */
+  setInput(f: { source: number; buttons: number; leftX: number; leftY: number; rightX: number; rightY: number; l2: number; r2: number }): void {
+    this.x.emu_machine_set_input(this.live(), f.source, f.buttons, f.leftX, f.leftY, f.rightX, f.rightY, f.l2, f.r2);
   }
 
   /** Run at most n instructions. */

@@ -6,5 +6,6 @@ root=$(cd "$here/../.." && pwd)
 cd "$root"
 rustup target add wasm32-unknown-unknown >/dev/null 2>&1 || true
 cargo build -p emulator-ffi --release --target wasm32-unknown-unknown
+mkdir -p "$here/public"
 cp target/wasm32-unknown-unknown/release/emulator_ffi.wasm "$here/public/emulator_core.wasm"
 echo "wrote apps/browser/public/emulator_core.wasm ($(wc -c < "$here/public/emulator_core.wasm") bytes)"

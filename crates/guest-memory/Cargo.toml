@@ -1,0 +1,8 @@
+[package]
+name = "guest-memory"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Guest physical memory model: bounds-checked, permission-checked, little-endian."
+
+[dependencies]

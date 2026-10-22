@@ -1,0 +1,9 @@
+[package]
+name = "cpu-x64"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "x86-64 instruction decoder and interpreter (documented subset)."
+
+[dependencies]
+guest-memory.workspace = true

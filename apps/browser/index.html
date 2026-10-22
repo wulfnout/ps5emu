@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Diagnostics</title>
+  </head>
+  <body>
+    <header class="top">
+      <div>
+        <h1 id="product">Emulator Core</h1>
+        <p class="dim">Core diagnostics · x86-64 interpreter subset · not a game loader yet</p>
+      </div>
+      <span id="core-status" class="pill">loading core…</span>
+    </header>
+
+    <main>
+      <section>
+        <div class="section-head">
+          <h2>Reference programs</h2>
+          <button id="btn-rerun">Run again</button>
+        </div>
+        <p id="summary"></p>
+        <div id="results" class="grid"></div>
+      </section>
+
+      <section id="debugger">
+        <div class="section-head">
+          <h2>Step debugger</h2>
+          <div class="controls">
+            <select id="program" aria-label="Program"></select>
+            <button id="btn-step">Step</button>
+            <button id="btn-run">Run</button>
+            <button id="btn-reset">Reset</button>
+          </div>
+        </div>
+        <p id="m-status"></p>
+        <p id="m-error" class="mono error-line"></p>
+        <div class="debug-grid">
+          <div>
+            <h3>Registers</h3>
+            <div id="regs" class="cells"></div>
+            <h3>Data memory 0x1000–0x103F</h3>
+            <div id="data" class="cells"></div>
+          </div>
+          <div>
+            <h3>Source (assembled with GNU as)</h3>
+            <pre id="source" class="mono"></pre>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,11 @@
+[package]
+name = "emulator-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Machine assembly: CPU + memory + program runner + diagnostics reports."
+
+[dependencies]
+guest-memory.workspace = true
+cpu-x64.workspace = true
+test-programs.workspace = true

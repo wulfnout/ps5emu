@@ -1,0 +1,12 @@
+[package]
+name = "emulator-ffi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "C ABI over emulator-core. One binding layer for both frontends: compiled to WebAssembly for the browser, and as a static library for iOS (Swift calls it through include/emulator.h)."
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+emulator-core.workspace = true

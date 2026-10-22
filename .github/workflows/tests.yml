@@ -1,0 +1,51 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  native:
+    name: Rust core (native)
+    runs-on: ubuntu-latest   # x86-64, so the hardware differential tests run
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        run: cargo build --workspace --locked
+      - name: Test
+        run: cargo test --workspace --locked
+      - name: Reference programs
+        run: cargo run -p emulator-core --bin emu-diag
+      - name: C interface (what iOS links against)
+        run: sh crates/emulator-ffi/tests/c_abi.sh
+      - name: Reference binaries match their sources
+        run: |
+          sh crates/test-programs/asm/build.sh
+          git diff --exit-code crates/test-programs/asm
+
+  browser:
+    name: WebAssembly core + browser app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build core to WebAssembly
+        run: sh apps/browser/scripts/build-wasm.sh
+      - name: Run reference programs inside WebAssembly
+        run: node apps/browser/scripts/smoke.mjs
+      - name: Build browser app
+        working-directory: apps/browser
+        run: |
+          npm install
+          npx tsc --noEmit
+          npx vite build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: browser-app
+          path: apps/browser/dist

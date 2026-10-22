@@ -21,7 +21,7 @@ for (const r of reports) {
 }
 
 // Single-step the milestone program through the machine API, as the debugger does.
-const h = x.emu_machine_new_test_program(0);
+const h = x.emu_machine_new_test_program(reports.findIndex((r) => r.name === "add_and_store"));
 let steps = 0;
 while (x.emu_machine_step(h) === 0) steps++;
 const state = JSON.parse(read(x.emu_machine_state_json(h)));

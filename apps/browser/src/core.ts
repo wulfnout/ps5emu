@@ -16,6 +16,11 @@ interface CoreExports {
   emu_machine_step(h: number): number;
   emu_machine_run(h: number): number;
   emu_machine_state_json(h: number): number;
+  emu_machine_run_steps(h: number, n: number): number;
+  emu_machine_screen_ptr(h: number): number;
+  emu_screen_width(): number;
+  emu_screen_height(): number;
+  emu_test_program_draws(index: number): number;
 }
 
 export const STATUS = { RUNNING: 0, HALTED: 1, ERROR: 2 } as const;
@@ -28,6 +33,7 @@ export interface ProgramReport {
   passed: boolean;
   steps: number;
   stop: string;
+  draws: boolean;
   checks: Check[];
   registers: [string, string][];
   rip: string;
@@ -75,6 +81,10 @@ export class Core {
     return JSON.parse(this.result(this.x.emu_run_all_tests()));
   }
 
+  screenSize(): { width: number; height: number } {
+    return { width: this.x.emu_screen_width() >>> 0, height: this.x.emu_screen_height() >>> 0 };
+  }
+
   testProgramCount(): number {
     return this.x.emu_test_program_count();
   }
@@ -110,6 +120,24 @@ export class Machine {
 
   run(): number {
     return this.x.emu_machine_run(this.live());
+  }
+
+  /** Run at most n instructions. */
+  runSteps(n: number): number {
+    return this.x.emu_machine_run_steps(this.live(), n);
+  }
+
+  /** Copy the screen into an RGBA ImageData (guest pixels are B,G,R,unused). */
+  drawScreen(img: ImageData): void {
+    const len = img.width * img.height * 4;
+    const src = new Uint8Array(this.x.memory.buffer, this.x.emu_machine_screen_ptr(this.live()) >>> 0, len);
+    const dst = img.data;
+    for (let i = 0; i < len; i += 4) {
+      dst[i] = src[i + 2];
+      dst[i + 1] = src[i + 1];
+      dst[i + 2] = src[i];
+      dst[i + 3] = 255;
+    }
   }
 
   state(): MachineState {

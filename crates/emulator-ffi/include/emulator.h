@@ -39,8 +39,15 @@ MachineHandle *emu_machine_new(const uint8_t *code, size_t len); /* NULL if too 
 MachineHandle *emu_machine_new_test_program(size_t index);       /* NULL if no such program */
 void           emu_machine_free(MachineHandle *h);
 
+uint32_t emu_screen_width(void);
+uint32_t emu_screen_height(void);
+int32_t  emu_test_program_draws(size_t index);
+/* width*height*4 bytes, 0x00RRGGBB little-endian, valid until the machine is freed */
+const uint8_t *emu_machine_screen_ptr(const MachineHandle *h);
+
 int32_t emu_machine_step(MachineHandle *h);              /* EMU_* status */
 int32_t emu_machine_run(MachineHandle *h);               /* EMU_* status */
+int32_t emu_machine_run_steps(MachineHandle *h, uint32_t n); /* at most n instructions */
 size_t  emu_machine_state_json(const MachineHandle *h);  /* returns a result length (JSON) */
 
 #ifdef __cplusplus

@@ -112,6 +112,35 @@ pub unsafe extern "C" fn emu_machine_free(h: *mut MachineHandle) {
     }
 }
 
+/// Screen size in pixels. Pixels are 4 bytes, 0x00RRGGBB little-endian
+/// (byte order B, G, R, unused), row by row.
+#[no_mangle]
+pub extern "C" fn emu_screen_width() -> u32 {
+    Machine::SCREEN_WIDTH
+}
+
+#[no_mangle]
+pub extern "C" fn emu_screen_height() -> u32 {
+    Machine::SCREEN_HEIGHT
+}
+
+/// Pointer to the machine's screen pixels (width * height * 4 bytes). In
+/// WebAssembly this is an offset into the module's memory, so the page can
+/// read the screen without copying. Valid until the machine is freed.
+///
+/// # Safety
+/// `h` must be a live handle.
+#[no_mangle]
+pub unsafe extern "C" fn emu_machine_screen_ptr(h: *const MachineHandle) -> *const u8 {
+    (*h).machine.framebuffer().as_ptr()
+}
+
+/// Whether built-in program `index` draws to the screen (1) or not (0).
+#[no_mangle]
+pub extern "C" fn emu_test_program_draws(index: usize) -> i32 {
+    emulator_core::test_programs::ALL.get(index).map_or(0, |p| p.draws as i32)
+}
+
 pub const EMU_RUNNING: i32 = 0;
 pub const EMU_HALTED: i32 = 1;
 pub const EMU_ERROR: i32 = 2;
@@ -161,6 +190,26 @@ pub unsafe extern "C" fn emu_machine_run(h: *mut MachineHandle) -> i32 {
     status(h)
 }
 
+/// Execute up to `n` instructions (stops early on halt/error). Returns the
+/// status. Lets a frontend animate long programs a slice at a time.
+///
+/// # Safety
+/// `h` must be a live handle.
+#[no_mangle]
+pub unsafe extern "C" fn emu_machine_run_steps(h: *mut MachineHandle, n: u32) -> i32 {
+    let h = &mut *h;
+    if status(h) != EMU_RUNNING {
+        return status(h);
+    }
+    let r = h.machine.cpu.run(&mut h.machine.memory, n as u64);
+    if let emulator_core::cpu_x64::StopReason::Error(e) = r.stop {
+        if e != CpuError::Halted {
+            h.last_error = Some(e.to_string());
+        }
+    }
+    status(h)
+}
+
 /// Machine state as JSON: registers, rip, rflags, status, error, data preview.
 /// Returns the JSON length.
 ///
@@ -201,6 +250,10 @@ pub unsafe extern "C" fn emu_machine_state_json(h: *const MachineHandle) -> usiz
 mod tests {
     use super::*;
 
+    fn index_of(name: &str) -> usize {
+        emulator_core::test_programs::ALL.iter().position(|p| p.name == name).unwrap()
+    }
+
     fn result() -> String {
         RESULT.with(|r| String::from_utf8(r.borrow().clone()).unwrap())
     }
@@ -217,7 +270,7 @@ mod tests {
     #[test]
     fn single_step_milestone_program_via_c_abi() {
         unsafe {
-            let h = emu_machine_new_test_program(0);
+            let h = emu_machine_new_test_program(index_of("add_and_store"));
             assert!(!h.is_null());
             let mut steps = 0;
             while emu_machine_step(h) == EMU_RUNNING {
@@ -236,7 +289,7 @@ mod tests {
     #[test]
     fn error_is_reported_not_hidden() {
         unsafe {
-            let h = emu_machine_new_test_program(3); // unsupported_cpuid
+            let h = emu_machine_new_test_program(index_of("unsupported_cpuid"));
             assert_eq!(emu_machine_run(h), EMU_ERROR);
             emu_machine_state_json(h);
             assert!(result().contains("unsupported instruction (0F A2)"), "{}", result());

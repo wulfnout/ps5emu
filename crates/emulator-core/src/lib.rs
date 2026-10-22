@@ -10,7 +10,7 @@
 use cpu_x64::{flags, Cpu, CpuError, StopReason, GPR_NAMES};
 use guest_memory::{GuestMemory, Perms};
 use test_programs::{ExpectedStop, TestProgram};
-use test_programs::{CODE_BASE, CODE_SIZE, DATA_BASE, DATA_SIZE, STACK_BASE, STACK_SIZE};
+use test_programs::{CODE_BASE, CODE_SIZE, DATA_BASE, DATA_SIZE, FB_BASE, FB_HEIGHT, FB_SIZE, FB_WIDTH, STACK_BASE, STACK_SIZE};
 
 pub use cpu_x64;
 pub use guest_memory;
@@ -31,10 +31,19 @@ impl Machine {
         memory.map(CODE_BASE, CODE_SIZE, Perms::RX).expect("code map");
         memory.map(DATA_BASE, DATA_SIZE, Perms::RW).expect("data map");
         memory.map(STACK_BASE, STACK_SIZE, Perms::RW).expect("stack map");
+        memory.map(FB_BASE, FB_SIZE, Perms::RW).expect("screen map");
         let mut cpu = Cpu::new();
         cpu.regs.gpr[4] = STACK_BASE + STACK_SIZE; // rsp
         Self { cpu, memory }
     }
+
+    /// The screen as raw 0x00RRGGBB little-endian pixels, row by row.
+    pub fn framebuffer(&self) -> &[u8] {
+        self.memory.view(FB_BASE, FB_SIZE as usize).expect("screen is mapped")
+    }
+
+    pub const SCREEN_WIDTH: u32 = FB_WIDTH;
+    pub const SCREEN_HEIGHT: u32 = FB_HEIGHT;
 
     pub fn load_code(&mut self, code: &[u8]) -> Result<(), String> {
         if code.len() as u64 > CODE_SIZE {
@@ -67,6 +76,7 @@ pub struct ProgramReport {
     pub rip: u64,
     pub rflags: u64,
     pub data_preview: Vec<(u64, u64)>,
+    pub draws: bool,
 }
 
 fn check(checks: &mut Vec<Check>, label: String, expected: String, actual: String) {
@@ -107,6 +117,10 @@ pub fn run_test_program(p: &TestProgram) -> ProgramReport {
         let actual = m.memory.read_u64(addr).map(|x| format!("{x:#x}")).unwrap_or_else(|e| e.to_string());
         check(&mut checks, format!("[{addr:#x}]"), format!("{v:#x}"), actual);
     }
+    for &(addr, v) in p.expect_mem32 {
+        let actual = m.memory.read_u32(addr).map(|x| format!("{x:#08x}")).unwrap_or_else(|e| e.to_string());
+        check(&mut checks, format!("px[{addr:#x}]"), format!("{v:#08x}"), actual);
+    }
     if let Some(zf) = p.expect_zf {
         check(&mut checks, "ZF".into(), zf.to_string(), m.cpu.regs.flag(flags::ZF).to_string());
     }
@@ -130,6 +144,7 @@ pub fn run_test_program(p: &TestProgram) -> ProgramReport {
         rip: m.cpu.regs.rip,
         rflags: m.cpu.regs.rflags,
         data_preview,
+        draws: p.draws,
     }
 }
 
@@ -178,9 +193,9 @@ impl ProgramReport {
         let regs: Vec<String> = self.registers.iter().map(|(n, v)| format!(r#"[{},"{v:#018x}"]"#, esc(n))).collect();
         let data: Vec<String> = self.data_preview.iter().map(|(a, v)| format!(r#"["{a:#06x}","{v:#018x}"]"#)).collect();
         format!(
-            r#"{{"name":{},"description":{},"source":{},"passed":{},"steps":{},"stop":{},"checks":[{}],"registers":[{}],"rip":"{:#x}","rflags":"{:#x}","data":[{}]}}"#,
+            r#"{{"name":{},"description":{},"source":{},"passed":{},"steps":{},"stop":{},"checks":[{}],"registers":[{}],"rip":"{:#x}","rflags":"{:#x}","data":[{}],"draws":{}}}"#,
             esc(&self.name), esc(&self.description), esc(&self.source), self.passed, self.steps, esc(&self.stop),
-            checks.join(","), regs.join(","), self.rip, self.rflags, data.join(",")
+            checks.join(","), regs.join(","), self.rip, self.rflags, data.join(","), self.draws
         )
     }
 }

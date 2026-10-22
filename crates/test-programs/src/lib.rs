@@ -8,6 +8,7 @@
 //!   0x0000–0x0FFF  code   (read + execute)
 //!   0x1000–0x1FFF  data   (read + write)
 //!   0x2000–0x2FFF  stack  (read + write), RSP starts at 0x3000
+//!   0x100000–      screen (read + write), 256x144 x 32-bit pixels
 
 pub const CODE_BASE: u64 = 0x0000;
 pub const CODE_SIZE: u64 = 0x1000;
@@ -15,6 +16,12 @@ pub const DATA_BASE: u64 = 0x1000;
 pub const DATA_SIZE: u64 = 0x1000;
 pub const STACK_BASE: u64 = 0x2000;
 pub const STACK_SIZE: u64 = 0x1000;
+
+/// Memory-mapped screen: 256x144 pixels, 4 bytes each, 0x00RRGGBB little-endian.
+pub const FB_BASE: u64 = 0x10_0000;
+pub const FB_WIDTH: u32 = 256;
+pub const FB_HEIGHT: u32 = 144;
+pub const FB_SIZE: u64 = (FB_WIDTH * FB_HEIGHT * 4) as u64;
 
 // Register indices in x86-64 encoding order.
 pub const RAX: u8 = 0;
@@ -45,9 +52,42 @@ pub struct TestProgram {
     pub expect_mem: &'static [(u64, u64)],
     /// Expected ZF after the run, if checked.
     pub expect_zf: Option<bool>,
+    /// (address, 32-bit value) — used for screen pixels.
+    pub expect_mem32: &'static [(u64, u32)],
+    /// The program draws to the screen.
+    pub draws: bool,
 }
 
 pub const ALL: &[TestProgram] = &[
+    TestProgram {
+        name: "draw_gradient",
+        description: "Fills the 256x144 screen with a color gradient: red follows x, green follows y (IMUL + SHR), blue is x XOR y.",
+        source: include_str!("../asm/draw_gradient.s"),
+        code: include_bytes!("../asm/draw_gradient.bin"),
+        expect_stop: ExpectedStop::Halted,
+        expect_regs: &[(RCX, 144)],
+        expect_mem: &[],
+        expect_zf: Some(true),
+        expect_mem32: &[(FB_BASE, 0x000000), (FB_BASE + 0x5028, 0x0A231E), (FB_BASE + 0x23FFC, 0xFFFA70)],
+        draws: true,
+    },
+    TestProgram {
+        name: "draw_checker",
+        description: "Draws a checkerboard with a red border using TEST, CMOVcc and SAR.",
+        source: include_str!("../asm/draw_checker.s"),
+        code: include_bytes!("../asm/draw_checker.bin"),
+        expect_stop: ExpectedStop::Halted,
+        expect_regs: &[(RCX, 144)],
+        expect_mem: &[],
+        expect_zf: Some(true),
+        expect_mem32: &[
+            (FB_BASE, 0xFF5D6C),
+            (FB_BASE + 0x5050, 0x1B2A49),
+            (FB_BASE + 0x50A0, 0xF2F2F2),
+            (FB_BASE + 0x23FFC, 0xF2F2F2),
+        ],
+        draws: true,
+    },
     TestProgram {
         name: "add_and_store",
         description: "Roadmap milestone: rax = 7, add 5, store to [0x1000], read back into rcx, compare with 12.",
@@ -57,6 +97,8 @@ pub const ALL: &[TestProgram] = &[
         expect_regs: &[(RAX, 12), (RCX, 12), (RBX, 0x1000)],
         expect_mem: &[(0x1000, 12)],
         expect_zf: Some(true),
+        expect_mem32: &[],
+        draws: false,
     },
     TestProgram {
         name: "sum_loop",
@@ -67,6 +109,8 @@ pub const ALL: &[TestProgram] = &[
         expect_regs: &[(RAX, 55), (RCX, 0), (RDX, 55), (RSP, 0x3000)],
         expect_mem: &[(0x1008, 55)],
         expect_zf: None,
+        expect_mem32: &[],
+        draws: false,
     },
     TestProgram {
         name: "array_sum",
@@ -78,6 +122,8 @@ pub const ALL: &[TestProgram] = &[
         expect_regs: &[(RAX, 2_147_483_724), (RBX, 4)],
         expect_mem: &[(0x1008, (-30i64) as u64), (0x1020, 2_147_483_724)],
         expect_zf: Some(true),
+        expect_mem32: &[],
+        draws: false,
     },
     TestProgram {
         name: "unsupported_cpuid",
@@ -88,6 +134,8 @@ pub const ALL: &[TestProgram] = &[
         expect_regs: &[(RAX, 1)],
         expect_mem: &[],
         expect_zf: None,
+        expect_mem32: &[],
+        draws: false,
     },
     TestProgram {
         name: "memory_fault",
@@ -98,5 +146,7 @@ pub const ALL: &[TestProgram] = &[
         expect_regs: &[(RAX, 42), (RBX, 0xDEAD_0000)],
         expect_mem: &[],
         expect_zf: None,
+        expect_mem32: &[],
+        draws: false,
     },
 ];

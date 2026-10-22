@@ -60,3 +60,5 @@ button.link { border: none; background: none; color: var(--accent); padding: 0; 
 pre { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; margin: 0; }
 .error-line { color: var(--bad); min-height: 1em; }
 .error-box { background: var(--panel); border: 1px solid var(--bad); border-radius: 10px; padding: 16px; }
+#screen { display: block; width: 100%; max-width: 768px; aspect-ratio: 16 / 9; height: auto; image-rendering: pixelated; background: #000; border: 1px solid var(--line); border-radius: 10px; margin: 8px 0; }
+.small { font-size: 13px; }

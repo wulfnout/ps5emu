@@ -9,6 +9,11 @@
 //! - MOV:   89, 8B, C7 /0, B8+r (imm32 / imm64 with REX.W)
 //! - LEA:   8D
 //! - INC/DEC: FF /0, FF /1
+//! - Accumulator forms: 05 0D 25 2D 35 3D A9 (op rAX, imm32)
+//! - TEST: 85, F7 /0 ; NOT/NEG: F7 /2, F7 /3
+//! - Shifts: SHL/SHR/SAR by 1 (D1), by CL (D3), by imm8 (C1)
+//! - IMUL: 0F AF, 6B, 69 (truncating forms)
+//! - CMOVcc: 0F 40-4F
 //! - Branches: 70-7F (Jcc rel8), 0F 80-8F (Jcc rel32), EB, E9, E8 (CALL rel32), C3 (RET)
 //! - Stack: 50+r PUSH, 58+r POP
 //! - NOP (90), HLT (F4)
@@ -74,6 +79,22 @@ pub enum AluOp {
     Sub,
     Xor,
     Cmp,
+    /// AND that only sets flags (TEST).
+    Test,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShiftKind {
+    Shl,
+    Shr,
+    Sar,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShiftCount {
+    Imm(u8),
+    /// Count taken from CL.
+    Cl,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -83,6 +104,13 @@ pub enum Op {
     Lea { width: Width, dst: u8, mem: MemRef },
     Inc { width: Width, dst: Operand },
     Dec { width: Width, dst: Operand },
+    Not { width: Width, dst: Operand },
+    Neg { width: Width, dst: Operand },
+    Shift { kind: ShiftKind, width: Width, dst: Operand, count: ShiftCount },
+    /// Signed multiply, truncating: dst = src * imm (3-operand form) or dst = dst * src.
+    Imul { width: Width, dst: u8, src: Operand, imm: Option<u64> },
+    /// Conditional move. In 64-bit mode a 32-bit CMOV zero-extends dst even when the condition is false.
+    Cmov { cond: u8, width: Width, dst: u8, src: Operand },
     /// Condition code 0..=15 in x86 order (O, NO, B, AE, E, NE, BE, A, S, NS, P, NP, L, GE, LE, G).
     Jcc { cond: u8, rel: i64 },
     Jmp { rel: i64 },
@@ -275,6 +303,52 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
             let imm = if b == 0x81 { c.i32()? } else { c.i8()? } as u64;
             Op::Alu { op: alu, width, dst: rm, src: Operand::Imm(imm) }
         }
+        // Accumulator short forms: op rAX, imm32 (sign-extended for 64-bit).
+        0x05 | 0x0D | 0x25 | 0x2D | 0x35 | 0x3D | 0xA9 => {
+            let alu = match b {
+                0x05 => AluOp::Add,
+                0x0D => AluOp::Or,
+                0x25 => AluOp::And,
+                0x2D => AluOp::Sub,
+                0x35 => AluOp::Xor,
+                0x3D => AluOp::Cmp,
+                _ => AluOp::Test,
+            };
+            Op::Alu { op: alu, width, dst: Operand::Reg(0), src: Operand::Imm(c.i32()? as u64) }
+        }
+        0x85 => {
+            let (reg, rm) = modrm(&mut c, rex)?;
+            Op::Alu { op: AluOp::Test, width, dst: rm, src: Operand::Reg(reg) }
+        }
+        0xF7 => {
+            let (ext, rm) = modrm(&mut c, rex)?;
+            match ext & 7 {
+                0 => Op::Alu { op: AluOp::Test, width, dst: rm, src: Operand::Imm(c.i32()? as u64) },
+                2 => Op::Not { width, dst: rm },
+                3 => Op::Neg { width, dst: rm },
+                _ => return Err(unsupported(&c, "MUL/IMUL/DIV/IDIV (F7 /4-/7) not implemented")),
+            }
+        }
+        0xC1 | 0xD1 | 0xD3 => {
+            let (ext, rm) = modrm(&mut c, rex)?;
+            let kind = match ext & 7 {
+                4 => ShiftKind::Shl,
+                5 => ShiftKind::Shr,
+                7 => ShiftKind::Sar,
+                _ => return Err(unsupported(&c, "rotates (ROL/ROR/RCL/RCR) not implemented")),
+            };
+            let count = match b {
+                0xC1 => ShiftCount::Imm(c.u8()?),
+                0xD1 => ShiftCount::Imm(1),
+                _ => ShiftCount::Cl,
+            };
+            Op::Shift { kind, width, dst: rm, count }
+        }
+        0x6B | 0x69 => {
+            let (reg, rm) = modrm(&mut c, rex)?;
+            let imm = if b == 0x6B { c.i8()? } else { c.i32()? } as u64;
+            Op::Imul { width, dst: reg, src: rm, imm: Some(imm) }
+        }
         0x89 => {
             let (reg, rm) = modrm(&mut c, rex)?;
             Op::Mov { width, dst: rm, src: Operand::Reg(reg) }
@@ -316,6 +390,14 @@ pub fn decode(bytes: &[u8]) -> Result<Instruction, DecodeError> {
             let b2 = c.u8()?;
             match b2 {
                 0x80..=0x8F => Op::Jcc { cond: b2 & 0xF, rel: c.i32()? },
+                0x40..=0x4F => {
+                    let (reg, rm) = modrm(&mut c, rex)?;
+                    Op::Cmov { cond: b2 & 0xF, width, dst: reg, src: rm }
+                }
+                0xAF => {
+                    let (reg, rm) = modrm(&mut c, rex)?;
+                    Op::Imul { width, dst: reg, src: rm, imm: None }
+                }
                 _ => return Err(unsupported(&c, "two-byte opcode not implemented")),
             }
         }

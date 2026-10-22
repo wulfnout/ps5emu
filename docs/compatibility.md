@@ -12,13 +12,18 @@ runs in CI. Nothing here boots PS5 software.
 | 8/16-bit operand sizes, `66` prefix | **Not implemented** — reported as unsupported |
 | ADD OR AND SUB XOR CMP (reg/mem/imm forms) | Implemented, results + flags checked against real x86-64 hardware |
 | ADC SBB | **Not implemented** |
+| Accumulator short forms (05 0D 25 2D 35 3D A9) | Implemented |
+| TEST, NOT, NEG | Implemented, checked against hardware |
+| SHL/SHR/SAR (by 1, CL, imm8) | Implemented, checked against hardware |
+| IMUL (two- and three-operand) | Implemented, checked against hardware |
+| CMOVcc (incl. 32-bit zero-extend quirk) | Implemented, checked against hardware |
 | INC DEC (CF preserved) | Implemented, checked against hardware |
 | MOV (89, 8B, C7 /0, B8+r incl. 64-bit immediate), LEA | Implemented |
 | Jcc (all 16 conditions, rel8/rel32), JMP rel8/rel32, CALL rel32, RET | Implemented |
 | PUSH/POP r64 | Implemented |
 | NOP, HLT | Implemented |
 | ModRM/SIB addressing, RIP-relative | Implemented |
-| Shifts/rotates, MUL/DIV, TEST, MOVZX/MOVSX, SETcc, CMOVcc | **Not implemented** |
+| Rotates, MUL/DIV (one-operand), MOVZX/MOVSX, SETcc | **Not implemented** |
 | String ops, LOCK, REP | **Not implemented** |
 | SSE / AVX / AVX2 (VEX), x87 | **Not implemented** — Zen 2 games rely heavily on these |
 | CPUID, RDTSC, SYSCALL, system instructions | **Not implemented** |
@@ -35,7 +40,8 @@ Any instruction outside this list stops execution with
 | Mapped regions with R/W/X permissions, bounds checks, faults | Implemented |
 | Accesses spanning two regions | Fault (stricter than hardware) |
 | Page tables / virtual address translation | **Not implemented** |
-| Memory-mapped devices | **Not implemented** |
+| Screen: 256×144 32-bit framebuffer at 0x100000 | Implemented (simple test screen, not the PS5 GPU) |
+| Other memory-mapped devices | **Not implemented** |
 
 ## Console systems
 

@@ -50,9 +50,16 @@ mov rcx, [rbx]` — runs as real x86-64 machine bytes and ends with
 stack, CALL/RET, RIP-relative and SIB addressing, an unsupported instruction
 (must stop, not skip), and a memory fault (must stop precisely).
 
-## Next steps (roadmap Phase 3 → 4)
+## Milestone 2: a screen
 
-1. Widen the instruction set: TEST, shifts, MUL/DIV, MOVZX/MOVSX, SETcc/CMOVcc, 8/16-bit sizes.
-2. Add a software framebuffer the browser draws to a `<canvas>`.
+The emulator now has a 256×144 screen in guest memory. Two reference
+programs (`draw_gradient`, `draw_checker`) are real x86-64 code that the
+emulated CPU runs to paint every pixel; the browser page shows it drawing.
+This is a simple test screen, not the PS5's GPU.
+
+## Next steps
+
+1. Widen the instruction set: MUL/DIV, MOVZX/MOVSX, SETcc, rotates, 8/16-bit sizes.
+2. Keyboard/controller input the guest can read.
 3. Page tables and virtual memory.
 4. Start the iOS shell on a Mac.

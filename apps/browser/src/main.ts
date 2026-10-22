@@ -33,8 +33,13 @@ async function boot() {
   status.className = "pill ok";
   status.textContent = `core v${core.version()} · WebAssembly`;
   runTests();
+  setupScreen();
   buildPicker();
+  // Open on the first program that draws, and play it.
+  selected = Math.max(0, reports.findIndex((r) => r.draws));
+  ($("#program") as HTMLSelectElement).value = String(selected);
   resetMachine();
+  play();
 }
 
 function runTests() {
@@ -72,26 +77,65 @@ function runTests() {
       ($("#program") as HTMLSelectElement).value = String(selected);
       resetMachine();
       $("#debugger").scrollIntoView({ behavior: "smooth" });
+      if (reports[selected].draws) play();
     }),
   );
 }
 
 function buildPicker() {
   const sel = $("#program") as HTMLSelectElement;
-  sel.innerHTML = reports.map((r, i) => `<option value="${i}">${esc(r.name)}</option>`).join("");
+  sel.innerHTML = reports.map((r, i) => `<option value="${i}">${esc(r.name)}${r.draws ? " 🖼" : ""}</option>`).join("");
   sel.addEventListener("change", () => {
     selected = Number(sel.value);
     resetMachine();
+    if (reports[selected].draws) play();
   });
   $("#btn-step").addEventListener("click", () => act((m) => m.step()));
-  $("#btn-run").addEventListener("click", () => act((m) => m.run()));
+  $("#btn-run").addEventListener("click", play);
   $("#btn-reset").addEventListener("click", resetMachine);
   $("#btn-rerun").addEventListener("click", runTests);
 }
 
 let previous: MachineState | null = null;
+let playing = 0;
+let screenCtx: CanvasRenderingContext2D | null = null;
+let screenImg: ImageData | null = null;
+
+function setupScreen() {
+  const canvas = $("#screen") as HTMLCanvasElement;
+  const { width, height } = core.screenSize();
+  canvas.width = width;
+  canvas.height = height;
+  screenCtx = canvas.getContext("2d");
+  screenImg = screenCtx?.createImageData(width, height) ?? null;
+}
+
+function drawScreen() {
+  if (!machine || !screenCtx || !screenImg) return;
+  machine.drawScreen(screenImg);
+  screenCtx.putImageData(screenImg, 0, 0);
+}
+
+/** Run a slice of instructions per animation frame so the drawing is visible. */
+function play() {
+  if (!machine || playing) return;
+  previous = null;
+  const tick = () => {
+    if (!machine) return;
+    const status = machine.runSteps(12000);
+    render();
+    playing = status === STATUS.RUNNING ? requestAnimationFrame(tick) : 0;
+  };
+  playing = requestAnimationFrame(tick);
+}
+
+function stop() {
+  if (playing) cancelAnimationFrame(playing);
+  playing = 0;
+}
 
 function resetMachine() {
+  stop();
   machine?.free();
   machine = core.machineForTestProgram(selected);
   previous = null;
@@ -101,6 +145,7 @@ function resetMachine() {
 
 function act(f: (m: Machine) => number) {
   if (!machine) return;
+  stop();
   previous = machine.state();
   f(machine);
   render();
@@ -115,7 +160,8 @@ function render() {
     <span class="dim">${s.retired} retired</span>`;
   $("#m-error").textContent = s.error ?? "";
   ($("#btn-step") as HTMLButtonElement).disabled = s.status !== STATUS.RUNNING;
-  ($("#btn-run") as HTMLButtonElement).disabled = s.status !== STATUS.RUNNING;
+  ($("#btn-run") as HTMLButtonElement).disabled = s.status !== STATUS.RUNNING || playing !== 0;
+  drawScreen();
 
   const changed = (i: number, list: "registers" | "data") =>
     previous && previous[list][i][1] !== s[list][i][1] ? "changed" : "";

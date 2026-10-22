@@ -161,6 +161,13 @@ impl GuestMemory {
         Ok(n)
     }
 
+    /// Host-side read-only view of `len` bytes at `addr`, if fully inside one
+    /// region. Used by frontends to present the screen without copying.
+    pub fn view(&self, addr: u64, len: usize) -> Option<&[u8]> {
+        let (i, off) = self.locate(addr, len, Access::Read).ok()?;
+        Some(&self.regions[i].bytes[off..off + len])
+    }
+
     pub fn read_u8(&self, addr: u64) -> Result<u8, MemoryFault> {
         let mut b = [0; 1];
         self.read(addr, &mut b, Access::Read)?;

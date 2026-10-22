@@ -3,7 +3,7 @@
 //! Exceptions are precise: if an instruction faults, RIP still points at it
 //! and no register has been modified.
 
-use crate::decoder::{decode, AluOp, DecodeError, MemRef, Op, Operand, Width, MAX_INSN_LEN};
+use crate::decoder::{decode, AluOp, DecodeError, MemRef, Op, Operand, ShiftCount, ShiftKind, Width, MAX_INSN_LEN};
 use crate::registers::{flags, Gpr, Registers};
 use guest_memory::{Access, GuestMemory, MemoryFault};
 use std::fmt;
@@ -87,7 +87,7 @@ pub fn alu(op: AluOp, width: Width, a: u64, b: u64) -> (u64, u64) {
             r
         }
         // Logic ops clear CF and OF. AF is architecturally undefined; we clear it.
-        AluOp::And => a & b,
+        AluOp::And | AluOp::Test => a & b,
         AluOp::Or => a | b,
         AluOp::Xor => a ^ b,
     };
@@ -99,6 +99,87 @@ pub fn alu(op: AluOp, width: Width, a: u64, b: u64) -> (u64, u64) {
     }
     if parity_even(r) {
         f |= flags::PF;
+    }
+    (r, f)
+}
+
+fn result_flags(r: u64, width: Width) -> u64 {
+    let mut f = 0;
+    if r == 0 {
+        f |= flags::ZF;
+    }
+    if r & width.sign_bit() != 0 {
+        f |= flags::SF;
+    }
+    if parity_even(r) {
+        f |= flags::PF;
+    }
+    f
+}
+
+/// Shift result and flags. Returns None when the masked count is 0: the
+/// destination and all flags are left unchanged, as on hardware.
+/// OF is only architecturally defined for a count of 1; for larger counts we
+/// compute it the same way, and tests compare it only for count 1.
+pub fn shift(kind: ShiftKind, width: Width, a: u64, count: u8) -> Option<(u64, u64)> {
+    let bits = (width.bytes() * 8) as u32;
+    let n = (count as u32) & if width == Width::W64 { 0x3F } else { 0x1F };
+    if n == 0 {
+        return None;
+    }
+    let mask = width.mask();
+    let a = a & mask;
+    let sign = width.sign_bit();
+    let (r, cf) = match kind {
+        ShiftKind::Shl => ((a << n) & mask, (a >> (bits - n)) & 1 != 0),
+        ShiftKind::Shr => (a >> n, (a >> (n - 1)) & 1 != 0),
+        ShiftKind::Sar => {
+            let sa = if width == Width::W64 { a as i64 } else { a as u32 as i32 as i64 };
+            ((sa >> n) as u64 & mask, (sa >> (n - 1)) & 1 != 0)
+        }
+    };
+    let of = match kind {
+        ShiftKind::Shl => (r & sign != 0) != cf,
+        ShiftKind::Shr => a & sign != 0,
+        ShiftKind::Sar => false,
+    };
+    let mut f = result_flags(r, width);
+    if cf {
+        f |= flags::CF;
+    }
+    if of {
+        f |= flags::OF;
+    }
+    Some((r, f))
+}
+
+/// Truncating signed multiply. CF = OF = 1 when the full signed product does
+/// not fit in the destination width. SF/ZF/PF are set from the result (they
+/// are architecturally undefined; tests compare only CF and OF).
+pub fn imul(width: Width, a: u64, b: u64) -> (u64, u64) {
+    let (sa, sb) = match width {
+        Width::W64 => (a as i64 as i128, b as i64 as i128),
+        Width::W32 => (a as u32 as i32 as i128, b as u32 as i32 as i128),
+    };
+    let full = sa * sb;
+    let r = (full as u64) & width.mask();
+    let fits = match width {
+        Width::W64 => full == (full as i64) as i128,
+        Width::W32 => full == (full as i32) as i128,
+    };
+    let mut f = result_flags(r, width);
+    if !fits {
+        f |= flags::CF | flags::OF;
+    }
+    (r, f)
+}
+
+/// NEG: 0 - a, with CF set when a != 0.
+pub fn neg(width: Width, a: u64) -> (u64, u64) {
+    let (r, mut f) = alu(AluOp::Sub, width, 0, a);
+    f &= !flags::CF;
+    if a & width.mask() != 0 {
+        f |= flags::CF;
     }
     (r, f)
 }
@@ -197,7 +278,7 @@ impl Cpu {
                 let a = self.read_op(mem, &dst, width, next).map_err(memerr)?;
                 let b = self.read_op(mem, &src, width, next).map_err(memerr)?;
                 let (r, f) = alu(op, width, a, b);
-                if op != AluOp::Cmp {
+                if op != AluOp::Cmp && op != AluOp::Test {
                     self.write_op(mem, &dst, width, r, next).map_err(memerr)?;
                 }
                 self.set_status(f, false);
@@ -216,6 +297,47 @@ impl Cpu {
                 let (r, f) = alu(alu_op, width, a, 1);
                 self.write_op(mem, &dst, width, r, next).map_err(memerr)?;
                 self.set_status(f, true);
+            }
+            Op::Not { width, dst } => {
+                let a = self.read_op(mem, &dst, width, next).map_err(memerr)?;
+                self.write_op(mem, &dst, width, !a, next).map_err(memerr)?;
+            }
+            Op::Neg { width, dst } => {
+                let a = self.read_op(mem, &dst, width, next).map_err(memerr)?;
+                let (r, f) = neg(width, a);
+                self.write_op(mem, &dst, width, r, next).map_err(memerr)?;
+                self.set_status(f, false);
+            }
+            Op::Shift { kind, width, dst, count } => {
+                let n = match count {
+                    ShiftCount::Imm(n) => n,
+                    ShiftCount::Cl => self.regs.gpr[1] as u8,
+                };
+                let a = self.read_op(mem, &dst, width, next).map_err(memerr)?;
+                if let Some((r, f)) = shift(kind, width, a, n) {
+                    self.write_op(mem, &dst, width, r, next).map_err(memerr)?;
+                    self.set_status(f, false);
+                }
+            }
+            Op::Imul { width, dst, src, imm } => {
+                let b = self.read_op(mem, &src, width, next).map_err(memerr)?;
+                let a = match imm {
+                    Some(_) => b,
+                    None => self.regs.gpr[dst as usize] & width.mask(),
+                };
+                let m = match imm {
+                    Some(i) => i,
+                    None => b,
+                };
+                let (r, f) = imul(width, a, m);
+                self.regs.gpr[dst as usize] = r;
+                self.set_status(f, false);
+            }
+            Op::Cmov { cond, width, dst, src } => {
+                // The source is read (and can fault) whether or not the move happens.
+                let v = self.read_op(mem, &src, width, next).map_err(memerr)?;
+                let d = dst as usize;
+                self.regs.gpr[d] = if self.condition(cond) { v } else { self.regs.gpr[d] & width.mask() };
             }
             Op::Jcc { cond, rel } => {
                 if self.condition(cond) {

@@ -1,0 +1,62 @@
+
+added 475 packages in 22s
+› Installing 1 other package using npm
+› Using ^58.0.0 instead of ~57.0.31 for expo because this version was explicitly provided. Packages excluded from dependency validation should be listed in expo.install.exclude in package.json. Learn more: https://docs.expo.dev/more/expo-cli/#configuring-dependency-validation
+> npm install
+
+added 42 packages, removed 6 packages, changed 30 packages, and audited 512 packages in 9s
+
+48 packages are looking for funding
+  run `npm fund` for details
+
+6 high severity vulnerabilities
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+› Running npx expo install under the updated expo version
+> expo install --fix
+The following packages should be updated for best compatibility with the installed expo version:
+  expo-status-bar@57.0.1 - expected version: ~58.0.4
+  expo-updates@57.0.26 - expected version: ~58.0.18
+  react@19.2.3 - expected version: 19.3.0
+  react-native@0.86.3 - expected version: 0.88.0
+  react-native-safe-area-context@5.7.0 - expected version: ~5.10.1
+  react-native-webview@13.16.1 - expected version: 14.0.1
+Your project may not work correctly until you install the expected versions of the packages.
+› Installing 6 SDK 58.0.0 compatible native modules using npm
+> npm install
+
+added 11 packages, removed 30 packages, changed 39 packages, and audited 493 packages in 7s
+
+47 packages are looking for funding
+  run `npm fund` for details
+
+6 high severity vulnerabilities
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+› Added config plugin: expo-status-bar
+Dependencies are up to date
+=== expo-doctor
+Running 20 checks on your project...
+20/20 checks passed. No issues detected!
+=== export check
+Starting Metro Bundler
+
+iOS Bundled 10583ms index.js (634 modules)
+
+› ios bundles (1):
+_expo/static/js/ios/index-2cf852af2bb1b33f9ff2120d5512423e.hbc (1.6MB)
+
+› Files (1):
+metadata.json (142B)
+
+Exported: /tmp/exp
+EXPORT OK
+12:    "expo": "^58.0.0",
+15:    "react": "19.3.0",
+16:    "react-native": "0.88.0",

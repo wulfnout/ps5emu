@@ -9,12 +9,12 @@
     "fix": "expo install --fix"
   },
   "dependencies": {
-    "expo": "~57.0.27",
-    "expo-status-bar": "~57.0.1",
-    "expo-updates": "~57.0.23",
-    "react": "19.2.3",
-    "react-native": "0.86.3",
-    "react-native-safe-area-context": "~5.7.0",
-    "react-native-webview": "13.16.1"
+    "expo": "^58.0.0",
+    "expo-status-bar": "~58.0.4",
+    "expo-updates": "~58.0.18",
+    "react": "19.3.0",
+    "react-native": "0.88.0",
+    "react-native-safe-area-context": "~5.10.1",
+    "react-native-webview": "14.0.1"
   }
 }

@@ -16,6 +16,9 @@
     "owner": "wulfnout",
     "runtimeVersion": {
       "policy": "sdkVersion"
-    }
+    },
+    "plugins": [
+      "expo-status-bar"
+    ]
   }
 }

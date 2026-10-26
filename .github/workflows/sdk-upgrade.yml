@@ -1,3 +1,4 @@
+# (retry: commit every changed file)
 # One-time upgrade to Expo SDK 58 (the version the current Expo Go app needs).
 # Runs on GitHub: installs SDK 58 and the matching package versions, commits package.json to main,
 # then republishes to Expo Go. The log is saved to the "sdk-upgrade-log" branch.
@@ -33,9 +34,10 @@ jobs:
           grep -q '"expo": "[~^]58' package.json
       - name: Commit and republish
         run: |
-          git add "$DIR/package.json"
+          git add -u "$DIR"; git status --short | head -20
           git -c user.name=bot -c user.email=bot@users.noreply.github.com commit -qm "Upgrade to Expo SDK 58" || { echo "nothing to commit"; exit 0; }
-          git pull -q --rebase origin main && git push -q origin HEAD:main
+          git pull -q --rebase --autostash origin main
+          git push -q origin HEAD:main
           if [ -f .github/workflows/expo-go.yml ]; then gh workflow run expo-go.yml --ref main || true; fi
       - name: Save log
         if: always()
